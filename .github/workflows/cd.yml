@@ -1,0 +1,28 @@
+name: CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-artifact:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t devops-somativa1:${{ github.sha }} .
+
+      - name: Export Docker image
+        run: docker save devops-somativa1:${{ github.sha }} -o devops-somativa1.tar
+
+      - name: Upload Docker artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: devops-somativa1-image
+          path: devops-somativa1.tar
+          retention-days: 7
