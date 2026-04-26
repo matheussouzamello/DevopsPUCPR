@@ -13,9 +13,9 @@ jobs:
     if: ${{ github.event_name == 'workflow_run' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Send CI status to Discord
+      - name: Build CI message
+        id: ci_msg
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
           CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
@@ -23,75 +23,55 @@ jobs:
           RUN_URL: ${{ github.event.workflow_run.html_url }}
           ACTOR: ${{ github.event.workflow_run.actor.login }}
         run: |
-          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
-            echo "Secret DISCORD_WEBHOOK_URL nao configurado."
-            exit 1
+          STATUS_EMOJI=":white_check_mark:"
+          if [ "$CONCLUSION" != "success" ]; then
+            STATUS_EMOJI=":x:"
           fi
 
-          python - <<'PY'
-          import json
-          import os
-          from urllib import request
+          {
+            echo "message<<EOF"
+            echo "${STATUS_EMOJI} **CI finalizado**"
+            echo "Workflow: \`${WORKFLOW_NAME}\`"
+            echo "Status: \`${CONCLUSION}\`"
+            echo "Branch: \`${BRANCH}\`"
+            echo "Commit: \`${COMMIT}\`"
+            echo "Autor: \`${ACTOR}\`"
+            echo "Execucao: ${RUN_URL}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
-          emoji = ":white_check_mark:" if os.environ["CONCLUSION"] == "success" else ":x:"
-          content = (
-              f"{emoji} **CI finalizado**\n"
-              f"Workflow: `{os.environ['WORKFLOW_NAME']}`\n"
-              f"Status: `{os.environ['CONCLUSION']}`\n"
-              f"Branch: `{os.environ['BRANCH']}`\n"
-              f"Commit: `{os.environ['COMMIT']}`\n"
-              f"Autor: `{os.environ['ACTOR']}`\n"
-              f"Execucao: {os.environ['RUN_URL']}"
-          )
-          data = json.dumps({"content": content}).encode("utf-8")
-          req = request.Request(
-              os.environ["DISCORD_WEBHOOK_URL"],
-              data=data,
-              headers={"Content-Type": "application/json"},
-              method="POST",
-          )
-          with request.urlopen(req) as response:
-              if response.status not in (200, 204):
-                  raise RuntimeError(f"Discord webhook failed: HTTP {response.status}")
-          PY
+      - name: Send CI status to Discord
+        uses: Ilshidur/action-discord@master
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_MESSAGE: ${{ steps.ci_msg.outputs.message }}
+          DISCORD_USERNAME: GitHub Actions
 
   notify-main-push:
     if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Send main push alert to Discord
+      - name: Build main push message
+        id: push_msg
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           BRANCH: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
           ACTOR: ${{ github.actor }}
           REPO: ${{ github.repository }}
         run: |
-          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
-            echo "Secret DISCORD_WEBHOOK_URL nao configurado."
-            exit 1
-          fi
+          {
+            echo "message<<EOF"
+            echo ":bell: **Novo push na main**"
+            echo "Repositorio: \`${REPO}\`"
+            echo "Branch: \`${BRANCH}\`"
+            echo "Commit: \`${COMMIT}\`"
+            echo "Autor: \`${ACTOR}\`"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
-          python - <<'PY'
-          import json
-          import os
-          from urllib import request
-
-          content = (
-              ":bell: **Novo push na main**\n"
-              f"Repositorio: `{os.environ['REPO']}`\n"
-              f"Branch: `{os.environ['BRANCH']}`\n"
-              f"Commit: `{os.environ['COMMIT']}`\n"
-              f"Autor: `{os.environ['ACTOR']}`"
-          )
-          data = json.dumps({"content": content}).encode("utf-8")
-          req = request.Request(
-              os.environ["DISCORD_WEBHOOK_URL"],
-              data=data,
-              headers={"Content-Type": "application/json"},
-              method="POST",
-          )
-          with request.urlopen(req) as response:
-              if response.status not in (200, 204):
-                  raise RuntimeError(f"Discord webhook failed: HTTP {response.status}")
-          PY
+      - name: Send main push alert to Discord
+        uses: Ilshidur/action-discord@master
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_MESSAGE: ${{ steps.push_msg.outputs.message }}
+          DISCORD_USERNAME: GitHub Actions
