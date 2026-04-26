@@ -1,0 +1,71 @@
+name: Discord Alerts
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  push:
+    branches:
+      - main
+
+jobs:
+  notify-ci-result:
+    if: ${{ github.event_name == 'workflow_run' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send CI status to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          COMMIT: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          ACTOR: ${{ github.event.workflow_run.actor.login }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "Secret DISCORD_WEBHOOK_URL nao configurado."
+            exit 1
+          fi
+
+          STATUS_EMOJI=":white_check_mark:"
+          if [ "$CONCLUSION" != "success" ]; then
+            STATUS_EMOJI=":x:"
+          fi
+
+          cat <<EOF > payload.json
+          {
+            "content": "${STATUS_EMOJI} **CI finalizado**\\nWorkflow: \`${WORKFLOW_NAME}\`\\nStatus: \`${CONCLUSION}\`\\nBranch: \`${BRANCH}\`\\nCommit: \`${COMMIT}\`\\nAutor: \`${ACTOR}\`\\nExecucao: ${RUN_URL}"
+          }
+          EOF
+
+          curl -sS -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d @payload.json
+
+  notify-main-push:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send main push alert to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          BRANCH: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "Secret DISCORD_WEBHOOK_URL nao configurado."
+            exit 1
+          fi
+
+          cat <<EOF > payload.json
+          {
+            "content": ":bell: **Novo push na main**\\nRepositorio: \`${REPO}\`\\nBranch: \`${BRANCH}\`\\nCommit: \`${COMMIT}\`\\nAutor: \`${ACTOR}\`"
+          }
+          EOF
+
+          curl -sS -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d @payload.json
