@@ -28,20 +28,32 @@ jobs:
             exit 1
           fi
 
-          STATUS_EMOJI=":white_check_mark:"
-          if [ "$CONCLUSION" != "success" ]; then
-            STATUS_EMOJI=":x:"
-          fi
+          python - <<'PY'
+          import json
+          import os
+          from urllib import request
 
-          cat <<EOF > payload.json
-          {
-            "content": "${STATUS_EMOJI} **CI finalizado**\\nWorkflow: \`${WORKFLOW_NAME}\`\\nStatus: \`${CONCLUSION}\`\\nBranch: \`${BRANCH}\`\\nCommit: \`${COMMIT}\`\\nAutor: \`${ACTOR}\`\\nExecucao: ${RUN_URL}"
-          }
-          EOF
-
-          curl -sS -X POST "$DISCORD_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d @payload.json
+          emoji = ":white_check_mark:" if os.environ["CONCLUSION"] == "success" else ":x:"
+          content = (
+              f"{emoji} **CI finalizado**\n"
+              f"Workflow: `{os.environ['WORKFLOW_NAME']}`\n"
+              f"Status: `{os.environ['CONCLUSION']}`\n"
+              f"Branch: `{os.environ['BRANCH']}`\n"
+              f"Commit: `{os.environ['COMMIT']}`\n"
+              f"Autor: `{os.environ['ACTOR']}`\n"
+              f"Execucao: {os.environ['RUN_URL']}"
+          )
+          data = json.dumps({"content": content}).encode("utf-8")
+          req = request.Request(
+              os.environ["DISCORD_WEBHOOK_URL"],
+              data=data,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          with request.urlopen(req) as response:
+              if response.status not in (200, 204):
+                  raise RuntimeError(f"Discord webhook failed: HTTP {response.status}")
+          PY
 
   notify-main-push:
     if: ${{ github.event_name == 'push' }}
@@ -60,12 +72,26 @@ jobs:
             exit 1
           fi
 
-          cat <<EOF > payload.json
-          {
-            "content": ":bell: **Novo push na main**\\nRepositorio: \`${REPO}\`\\nBranch: \`${BRANCH}\`\\nCommit: \`${COMMIT}\`\\nAutor: \`${ACTOR}\`"
-          }
-          EOF
+          python - <<'PY'
+          import json
+          import os
+          from urllib import request
 
-          curl -sS -X POST "$DISCORD_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d @payload.json
+          content = (
+              ":bell: **Novo push na main**\n"
+              f"Repositorio: `{os.environ['REPO']}`\n"
+              f"Branch: `{os.environ['BRANCH']}`\n"
+              f"Commit: `{os.environ['COMMIT']}`\n"
+              f"Autor: `{os.environ['ACTOR']}`"
+          )
+          data = json.dumps({"content": content}).encode("utf-8")
+          req = request.Request(
+              os.environ["DISCORD_WEBHOOK_URL"],
+              data=data,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          with request.urlopen(req) as response:
+              if response.status not in (200, 204):
+                  raise RuntimeError(f"Discord webhook failed: HTTP {response.status}")
+          PY
